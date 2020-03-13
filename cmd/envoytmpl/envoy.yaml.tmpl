@@ -1,0 +1,126 @@
+node:
+  id: proxy1
+  cluster: proxycluster
+
+admin:
+  access_log_path: /dev/stdout
+  address:
+    socket_address: { address: 0.0.0.0, port_value: 8004 }
+
+static_resources:
+  listeners:
+  - name: http_listener_80
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 80
+    filter_chains:
+    - filters:
+      - name: envoy.http_connection_manager
+        config:
+          codec_type: auto
+          stat_prefix: ingress_http
+          route_config:
+            virtual_hosts:
+            - name: backend
+              domains:
+              - "*"
+              routes:
+              - match:
+                  prefix: "/"
+                redirect:
+                  path_redirect: "/"
+                  https_redirect: true
+          http_filters:
+          - name: envoy.router
+            config: {}
+
+  - name: http_listener_443
+    address:
+      socket_address: 
+        address: 0.0.0.0
+        port_value: 443
+    listener_filters:
+    - name: "envoy.listener.tls_inspector"
+      typed_config: {}
+    filter_chains:
+
+{{range $fc := .FilterChains }}
+    - filter_chain_match:
+        server_names: [{{$fc.Domain}}]
+      tls_context:
+        common_tls_context:
+          alpn_protocols: h2
+          tls_certificate_sds_secret_configs:
+          - name: "{{$fc.Domain}}"
+            sds_config:
+              api_config_source:
+                api_type: GRPC
+                grpc_services:
+                  envoy_grpc:
+                    cluster_name: sds_server
+      filters:
+      - name: envoy.http_connection_manager
+        config:
+          http_filters:
+          - name: envoy.gzip
+            config:
+              memory_level: 9
+              content_length: 30
+              content_type: ["application/javascript", "application/json", "application/xhtml+xml", "image/svg+xml", "text/css", "text/html", "text/plain", "text/xml"]
+              compression_level: BEST
+          - name: envoy.router
+            config: {}
+          access_log:
+            name: envoy.file_access_log
+            config:
+              path: /dev/stdout
+              format: "[%START_TIME%] \"%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%\" %RESPONSE_CODE% %RESPONSE_FLAGS% %BYTES_RECEIVED% %BYTES_SENT% %DURATION% %RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)% \"%REQ(X-FORWARDED-FOR)%\" \"%REQ(USER-AGENT)%\" \"%REQ(X-REQUEST-ID)%\" \"%REQ(:AUTHORITY)%\" UPSTR\"%UPSTREAM_HOST%\" DOWNSTR:\"%DOWNSTREAM_REMOTE_ADDRESS%\"\n"
+          stat_prefix: ingress_http
+          codec_type: AUTO
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: {{ $fc.ClusterName }}_vhost
+              domains: 
+              - "{{$fc.Domain}}"
+              routes:
+              {{- range $r:= $fc.Routes }}
+              {{- if  eq $r.Type "websocket" }}
+              - match: { prefix: "{{ $r.MatchPrefix }}" }
+                route: { cluster: {{ $r.ClusterName }}, idle_timeout: "{{ $r.Timeout }}", timeout: "{{ $r.Timeout }}", upgrade_configs: [{upgrade_type: websocket}] }
+              {{- else if eq $r.Type "default"}}
+              - match: { prefix: "{{ $r.MatchPrefix }}" }
+                route: { cluster: {{ $r.ClusterName }}, idle_timeout: "{{ $r.Timeout }}", timeout: "{{ $r.Timeout }}" }
+              {{- end}}
+              {{- end }}
+
+{{end}}
+
+  clusters:
+
+  - name: sds_server
+    connect_timeout: 5s
+    http2_protocol_options: {}
+    hosts: 
+    - pipe:
+        path: /envoysds/envoysds.sock
+
+{{range $c := .Clusters }}
+  - name: {{$c.Name}}
+    connect_timeout: 5s
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    dns_lookup_family: V4_ONLY
+    hosts: 
+    - socket_address:
+        address: {{$c.Address}}
+        port_value: {{$c.Port}}
+    health_checks:
+    - timeout: 0.5s
+      interval: 5s
+      unhealthy_threshold: 2
+      healthy_threshold: 3
+      http_health_check: 
+        path: "/"
+{{end}}

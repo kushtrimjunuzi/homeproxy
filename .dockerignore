@@ -1,0 +1,5 @@
+*
+!cmd/autocertdelegate/autocertdelegate
+!cmd/envoysds/envoysds
+!cmd/envoytmpl/envoytmpl
+!docker/tlsrouter/tlsrouter.config

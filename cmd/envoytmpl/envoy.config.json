@@ -1,0 +1,43 @@
+{
+	"filterChains": [
+		{
+			"domain": "domain.com",
+			"clusterName": "cluster1"
+		},
+		{
+			"domain": "domain2.com",
+			"clusterName": "cluster2"
+		},
+		{
+			"domain": "domain3.com",
+			"clusterName": "cluster2",
+			"routes":[
+				{
+					"matchPrefix":"/api/websocket",
+					"clusterName":"cluster2",
+					"timeout":"10s",
+					"type":"websocket"
+				},
+				{
+					"matchPrefix":"/",
+					"clusterName":"cluster2",
+					"timeout":"10s",
+					"type":"default"
+				}
+			]
+		}
+	],
+
+	"clusters": [
+		{
+			"name": "cluster1",
+			"address": "localhost",
+			"port": 8001
+		},
+		{
+			"name": "cluster2",
+			"address": "127.0.0.1",
+			"port": 8002
+		}
+	]
+}
