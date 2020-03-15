@@ -1,4 +1,4 @@
-module github.com/kushtrimjunuzi/lancerts
+module github.com/kushtrimjunuzi/homeproxy
 
 go 1.14
 
