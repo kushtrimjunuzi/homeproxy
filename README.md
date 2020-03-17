@@ -2,6 +2,10 @@
 
 Set of tools to build your private home hosted proxy with Let's Encrypt TLS certificates, all your local apps stays local no public reach.
 
+## Diagram
+
+![homeproxy](homeproxy.png)
+
 ## Tools 
 
 There are 4 docker containers that you need to host:
